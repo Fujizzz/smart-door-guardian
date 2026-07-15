@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+dist/
+build/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Biometric data and locally trained models
+data/faces/**
+!data/faces/.gitkeep
+data/access_code.json
+data/events.jsonl
+models/**
+!models/.gitkeep
+
+# Runtime media and generated files
+*.wav
+*.mp3
+*.xls
+*.xlsx
+*.log
+*.tmp
+
