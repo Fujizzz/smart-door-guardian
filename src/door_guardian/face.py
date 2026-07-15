@@ -121,23 +121,30 @@ class FaceService:
         except ImportError as exc:
             raise FaceServiceError("未安装 NumPy。") from exc
 
-        names = sorted(
-            path.name for path in self.settings.faces_dir.iterdir() if path.is_dir()
+        user_directories = sorted(
+            path for path in self.settings.faces_dir.iterdir() if path.is_dir()
         )
-        if not names:
+        if not user_directories:
             raise FaceServiceError("没有人脸样本，请先执行 collect。")
 
         samples = []
         labels: list[int] = []
         label_map: dict[str, str] = {}
-        for label, name in enumerate(names):
-            label_map[str(label)] = name
-            for image_path in sorted((self.settings.faces_dir / name).glob("*.jpg")):
+        for user_directory in user_directories:
+            user_samples = []
+            for image_path in sorted(user_directory.glob("*.jpg")):
                 image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
                 if image is None or image.size == 0:
                     continue
-                samples.append(image)
-                labels.append(label)
+                user_samples.append(image)
+
+            if not user_samples:
+                continue
+
+            label = len(label_map)
+            label_map[str(label)] = user_directory.name
+            samples.extend(user_samples)
+            labels.extend([label] * len(user_samples))
 
         if not samples:
             raise FaceServiceError("未找到可用的 JPG 人脸样本。")
@@ -148,7 +155,7 @@ class FaceService:
         self.settings.labels_path.write_text(
             json.dumps(label_map, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        return len(names), len(samples)
+        return len(label_map), len(samples)
 
     def recognize(self) -> RecognitionResult:
         """Recognize a registered face. Press Esc or Q to cancel."""
@@ -161,7 +168,8 @@ class FaceService:
         recognizer.read(str(self.settings.model_path))
         labels = json.loads(self.settings.labels_path.read_text(encoding="utf-8"))
         camera = self._camera(cv2)
-        match_counts: dict[int, int] = {}
+        consecutive_label: int | None = None
+        consecutive_matches = 0
 
         try:
             for _ in range(self.settings.face_max_frames):
@@ -170,12 +178,17 @@ class FaceService:
                     return RecognitionResult(False, reason="摄像头读取失败。")
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = cascade.detectMultiScale(gray, 1.2, 5, minSize=(80, 80))
+                best_match: tuple[int, str, float, float] | None = None
                 for x, y, width, height in faces:
                     label, distance = recognizer.predict(
                         gray[y : y + height, x : x + width]
                     )
-                    matched = distance <= self.settings.face_confidence_threshold
-                    name = labels.get(str(label), "未知用户") if matched else "陌生人"
+                    registered_name = labels.get(str(label))
+                    matched = (
+                        registered_name is not None
+                        and distance <= self.settings.face_confidence_threshold
+                    )
+                    name = registered_name if matched else "陌生人"
                     score = max(0.0, 100.0 - float(distance))
                     color = (40, 200, 80) if matched else (40, 40, 220)
                     cv2.rectangle(frame, (x, y), (x + width, y + height), color, 2)
@@ -188,10 +201,23 @@ class FaceService:
                         color,
                         2,
                     )
-                    if matched:
-                        match_counts[label] = match_counts.get(label, 0) + 1
-                        if match_counts[label] >= self.settings.face_required_matches:
-                            return RecognitionResult(True, name=name, confidence=score)
+                    if matched and (
+                        best_match is None or float(distance) < best_match[3]
+                    ):
+                        best_match = (label, name, score, float(distance))
+
+                if best_match is None:
+                    consecutive_label = None
+                    consecutive_matches = 0
+                else:
+                    label, name, score, _ = best_match
+                    if label == consecutive_label:
+                        consecutive_matches += 1
+                    else:
+                        consecutive_label = label
+                        consecutive_matches = 1
+                    if consecutive_matches >= self.settings.face_required_matches:
+                        return RecognitionResult(True, name=name, confidence=score)
 
                 cv2.imshow("Smart Door Guardian - Recognition", frame)
                 key = cv2.waitKey(30) & 0xFF
@@ -202,4 +228,3 @@ class FaceService:
             cv2.destroyAllWindows()
 
         return RecognitionResult(False, reason="在限定时间内未识别到授权用户。")
-

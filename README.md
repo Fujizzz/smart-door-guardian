@@ -1,32 +1,27 @@
-# Smart Door Guardian（智能门神）
+# Smart Door Guardian
 
-一个面向树莓派与普通桌面电脑的本地智能门禁原型。项目将人脸采集、LBPH 模型训练、实时识别、访问码回退、异常邮件、离家天气提醒、离线语音和事件审计整合到统一的桌面界面与命令行中。
+A privacy-conscious desktop prototype for local door-access workflows. It combines OpenCV LBPH face recognition, a hashed access-code fallback, optional SMTP alerts, current-weather reminders, offline speech, and a local audit log in one Tkinter GUI and command-line application.
 
-> 本项目是教育与原型验证用途，不是经过认证的实体安防产品。连接真实门锁前，请增加独立硬件互锁、断电保护和安全审计。
+> This repository is an educational prototype, not a certified physical-security product. It does not drive a real lock or GPIO pin. Add an isolated, fail-safe hardware adapter, physical override, power-loss handling, and a professional security review before connecting it to a door.
 
-## 项目亮点
+## Features
 
-- OpenCV LBPH 本地人脸识别，图像和模型无需上传云端
-- 摄像头不可用或模型未训练时自动回退到访问码
-- 访问码使用随机盐和 PBKDF2-SHA256 保存，不在源码或磁盘中存明文
-- 陌生人访问可通过 SMTP 发送提醒，所有凭据只从环境变量读取
-- 使用 Open-Meteo 获取当前天气，无需 API Key
-- 使用可选的 `pyttsx3` 进行离线语音播报
-- JSON Lines 本地事件日志，便于查看最近访问和离家记录
-- GUI 和 CLI 两种使用方式；演示模式无需摄像头、模型或云服务即可启动
-- 提供自动测试和 GitHub Actions
-
-## 界面功能
-
-| 操作 | 行为 |
+| Feature | Behavior |
 | --- | --- |
-| 回家 / 身份验证 | 先执行人脸识别；失败或模型缺失时请求访问码 |
-| 出门 / 天气提醒 | 记录离家事件，获取天气并进行语音提示 |
-| 添加人脸用户 | 调用摄像头采集样本，随后重新训练 LBPH 模型 |
-| 修改访问码 | 验证当前访问码后写入新的安全哈希 |
-| 查看最近事件 | 显示最近 15 条本地审计记录 |
+| Face enrollment | Captures cropped grayscale faces from a camera and stores them locally. |
+| Face training | Builds a local OpenCV LBPH model and a label map. Empty or unreadable user folders are ignored. |
+| Face authentication | Requires the same registered identity to match for several consecutive frames. |
+| Access-code fallback | Falls back to a masked access-code prompt when the model or camera is unavailable or recognition fails. |
+| Secure code storage | Stores a salted PBKDF2-SHA256 digest instead of the plaintext access code. |
+| Intruder alert | Optionally sends an SMTP email after a denied access-code attempt. |
+| Departure reminder | Records a departure, fetches current Open-Meteo weather, and optionally speaks the result. |
+| Audit trail | Writes local JSON Lines events for application starts, access decisions, departures, enrollment, and code changes. |
+| Two interfaces | Provides a Tkinter GUI and a scriptable CLI. |
+| Hardware-free start | The basic GUI, diagnostics, access-code fallback, and tests run without OpenCV or a camera. |
 
-## 架构
+Face images, trained models, access-code hashes, `.env`, and audit logs are excluded from Git by default.
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -37,50 +32,32 @@ flowchart LR
     UI --> SPEECH["Speaker"]
     UI --> AUDIT["AuditLog"]
     FACE --> CAMERA["Camera + OpenCV"]
-    FACE --> PRIVATE["Local face samples and LBPH model"]
-    PIN --> HASH["Salted PBKDF2 hash"]
+    FACE --> PRIVATE["Local samples + LBPH model"]
+    PIN --> HASH["Salted PBKDF2-SHA256 hash"]
     WEATHER --> METEO["Open-Meteo API"]
     ALERT --> SMTP["Configured SMTP server"]
 ```
 
-## 目录结构
+## Requirements
 
-```text
-smart-door-guardian/
-├── src/door_guardian/
-│   ├── access.py       # 访问码哈希、验证与修改
-│   ├── audit.py        # 私有 JSONL 事件日志
-│   ├── cli.py          # 统一命令行入口
-│   ├── config.py       # .env 和环境变量配置
-│   ├── face.py         # 人脸采集、训练和识别
-│   ├── gui.py          # Tkinter 桌面界面
-│   ├── notifier.py     # SMTP 异常访问提醒
-│   ├── speech.py       # 可选离线语音
-│   └── weather.py      # 无密钥天气服务
-├── scripts/            # 人脸采集和训练快捷脚本
-├── tests/              # 不依赖摄像头的自动测试
-├── data/faces/         # 本地人脸样本；Git 忽略
-├── models/             # 本地训练模型；Git 忽略
-├── .env.example
-├── pyproject.toml
-└── main.py
-```
+- Python 3.10, 3.11, or 3.12
+- Windows, Linux, or Raspberry Pi OS
+- Tkinter for the GUI
+- A camera, NumPy, and `opencv-contrib-python` for face features
+- `pyttsx3` and a working system speech engine for optional offline speech
+- Internet access only for weather and SMTP alerts
 
-## 环境要求
+The core package intentionally has no mandatory third-party dependency. Hardware and speech dependencies are optional extras.
 
-- Python 3.10–3.12
-- Windows、Linux 或 Raspberry Pi OS
-- GUI 需要 Tkinter。Windows 官方 Python 通常自带；Debian/Raspberry Pi OS 可安装 `python3-tk`
-- 人脸功能需要摄像头、NumPy 和 `opencv-contrib-python`
-- 语音功能可选，需要 `pyttsx3` 以及系统可用的语音引擎
+## Quick start: demo and access-code mode
 
-## 快速启动：无硬件演示
-
-基础 GUI 和诊断只依赖 Python 标准库。以下命令不会安装 OpenCV：
+This setup starts the application without installing OpenCV.
 
 ### Windows PowerShell
 
 ```powershell
+git clone https://github.com/Fujizzz/smart-door-guardian.git
+Set-Location smart-door-guardian
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -89,9 +66,11 @@ python main.py diagnose
 python main.py
 ```
 
-### Linux / Raspberry Pi OS
+### Linux or Raspberry Pi OS
 
 ```bash
+git clone https://github.com/Fujizzz/smart-door-guardian.git
+cd smart-door-guardian
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -100,110 +79,181 @@ python main.py diagnose
 python main.py
 ```
 
-首次启动会创建私有的访问码哈希。未配置 `.env` 时，演示访问码为 `123456`；它仅用于本地演示，真实部署前必须修改。
+If no `.env` or existing access-code file is present, the first start initializes the local demo code as `123456`. Change it immediately with the GUI or `door-guardian set-code`. The plaintext is used only to create the initial hash; it is not written to the access-code file.
 
-## 安装完整功能
+The face model is initially absent, so **Home / Authenticate** automatically opens the access-code fallback. Weather failures are displayed without terminating the GUI.
+
+## Install the complete feature set
+
+Use a clean virtual environment and install all optional features:
 
 ```bash
 python -m pip install -e ".[full]"
+python main.py diagnose
 ```
 
-也可以使用：
+Equivalent requirements-file installation:
 
 ```bash
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
 
-如果系统同时安装了 `opencv-python` 和 `opencv-contrib-python`，可能发生 `cv2.face` 缺失。建议在虚拟环境中只保留 `opencv-contrib-python`：
+The `diagnose` command reports the Python executable, project directory, demo mode, model status, email status, and availability of Tkinter, OpenCV, NumPy, and pyttsx3.
 
-```bash
-python -m pip uninstall -y opencv-python opencv-contrib-python
-python -m pip install "opencv-contrib-python>=4.8,<5"
-```
+## Configuration
 
-## 配置
+Create a private environment file before real use.
 
-复制配置模板：
+Windows PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Linux/macOS：
+Linux or macOS:
 
 ```bash
 cp .env.example .env
 ```
 
-主要配置：
+Edit `.env` and set appropriate values:
 
-| 变量 | 说明 | 默认值 |
+| Variable | Purpose | Default when unset |
 | --- | --- | --- |
-| `DOOR_DEMO_MODE` | 是否使用演示模式标识 | `true` |
-| `DOOR_ACCESS_CODE` | 仅用于首次创建本地哈希 | `123456` |
-| `DOOR_CAMERA_INDEX` | OpenCV 摄像头索引 | `0` |
-| `DOOR_FACE_THRESHOLD` | LBPH 距离阈值；越小越严格 | `65` |
-| `DOOR_REQUIRED_MATCHES` | 允许访问前需要的匹配帧数 | `5` |
-| `DOOR_MAX_FRAMES` | 单次识别的最大帧数 | `300` |
-| `WEATHER_LATITUDE` | 天气位置纬度 | 重庆纬度 |
-| `WEATHER_LONGITUDE` | 天气位置经度 | 重庆经度 |
-| `WEATHER_TIMEZONE` | 天气时区 | `Asia/Shanghai` |
-| `SMTP_*` | 可选异常访问邮件配置 | 未配置 |
+| `DOOR_DEMO_MODE` | Marks events and the GUI as demo or production mode. | `true` |
+| `DOOR_ACCESS_CODE` | Creates the first local hash only when `data/access_code.json` does not exist. | `123456` |
+| `DOOR_CAMERA_INDEX` | Index passed to `cv2.VideoCapture`. | `0` |
+| `DOOR_FACE_THRESHOLD` | Maximum accepted LBPH distance; lower is stricter. | `65` |
+| `DOOR_REQUIRED_MATCHES` | Consecutive matching frames required before access is granted. | `5` |
+| `DOOR_MAX_FRAMES` | Maximum frames processed during one recognition attempt. | `300` |
+| `WEATHER_LATITUDE` | Latitude used by Open-Meteo. | `29.5630` |
+| `WEATHER_LONGITUDE` | Longitude used by Open-Meteo. | `106.5516` |
+| `WEATHER_TIMEZONE` | IANA timezone sent to Open-Meteo. | `Asia/Shanghai` |
+| `SMTP_HOST` | SMTP server hostname. | empty |
+| `SMTP_PORT` | SMTP server port. | `465` |
+| `SMTP_USERNAME` | SMTP login user. | empty |
+| `SMTP_PASSWORD` | SMTP password or provider app password. | empty |
+| `SMTP_SENDER` | Message sender address. | empty |
+| `SMTP_RECIPIENT` | Alert recipient address. | empty |
+| `SMTP_USE_SSL` | Use implicit TLS; `false` uses SMTP plus STARTTLS. | `true` |
 
-`.env` 已被 Git 忽略。不要把真实邮箱密码、API Key 或访问码写进 Python 文件。
+Changing `DOOR_ACCESS_CODE` after the first run does not replace an existing hash. Use **Change Access Code** or `door-guardian set-code` instead.
 
-## 人脸用户工作流
+Never commit `.env`, real passwords, access codes, face images, trained models, or audit logs.
 
-### 1. 采集样本
+## GUI usage
+
+Start the installed command or the source-tree entry point:
 
 ```bash
-door-guardian collect user1 --samples 80
+door-guardian gui
+# or
+python main.py
 ```
 
-也可直接运行：
+The GUI provides five actions:
+
+1. **Home / Authenticate**
+   - Opens the camera when a trained model exists.
+   - Grants access after the configured number of consecutive matches.
+   - Opens a masked access-code prompt if recognition is unavailable, cancelled, or unsuccessful.
+   - Records `access_granted` or `access_denied` in `data/events.jsonl`.
+   - Sends an alert after a wrong fallback code when SMTP is configured.
+2. **Leave / Weather Reminder**
+   - Records a `departure` event.
+   - Retrieves the current temperature, weather condition, and wind speed.
+   - Shows the result and speaks it when pyttsx3 is available.
+3. **Add Face User**
+   - Requests a user name and sample count.
+   - Captures samples and retrains the complete model automatically.
+   - Press `Esc` or `Q` in the camera window to stop capture. Cancelling before any sample is captured does not start training.
+4. **Change Access Code**
+   - Verifies the current code.
+   - Requires a new code of 6 to 128 characters.
+   - Replaces the stored salt and PBKDF2 digest atomically.
+5. **Recent Events**
+   - Displays the latest 15 local audit records.
+
+## Face enrollment workflow
+
+Good recognition depends on representative samples. Use one directory per person, consistent names, adequate lighting, and a front-facing camera.
+
+### 1. Collect samples
 
 ```bash
-python main.py collect user1 --samples 80
+door-guardian collect alice --samples 80
+# or
+python main.py collect alice --samples 80
 ```
 
-采集窗口中按 `Esc` 或 `Q` 可提前停止。建议在不同角度和光照下采集 60–100 张清晰正脸。
+The command sanitizes the user name, opens the configured camera, detects frontal faces, and writes cropped grayscale JPEGs to `data/faces/alice/`. Collect approximately 60 to 100 clear images with modest variations in pose and lighting. Press `Esc` or `Q` to stop.
 
-### 2. 训练模型
+### 2. Train or retrain the model
 
 ```bash
 door-guardian train
+# or
+python main.py train
 ```
 
-训练结果写入 `models/lbph_model.yml`，标签写入 `models/labels.json`。两者均属于本地生物特征产物，不会被 Git 提交。
+Training scans every user directory, ignores empty folders and unreadable JPEGs, then writes:
 
-### 3. 测试识别
+- `models/lbph_model.yml` — the OpenCV LBPH model
+- `models/labels.json` — numeric model labels mapped to user names
+
+Always retrain after adding, replacing, or removing samples.
+
+### 3. Test recognition
 
 ```bash
 door-guardian recognize
+# or
+python main.py recognize
 ```
 
-达到连续匹配要求后返回授权用户；按 `Esc` 或 `Q` 取消。
+The command returns exit code `0` after a granted match and `2` after a normal denial or cancellation. Press `Esc` or `Q` to cancel. Unknown model labels are never granted access, even if their LBPH distance is below the threshold.
 
-## 其他命令
+### 4. Tune recognition
+
+- Reduce `DOOR_FACE_THRESHOLD` to reject more uncertain matches.
+- Increase `DOOR_REQUIRED_MATCHES` to require a longer stable match.
+- Increase `DOOR_MAX_FRAMES` when camera startup or recognition is slow.
+- Recollect samples when lighting, camera position, or appearance changes significantly.
+
+Tune these values using your own device and users. LBPH is suitable for a local prototype but is not liveness detection and does not prevent photo or video presentation attacks.
+
+## Access-code management
+
+Set a new code through a masked prompt:
 
 ```bash
-# 运行环境诊断
-door-guardian diagnose
-
-# 启动 GUI
-door-guardian gui
-
-# 获取当前天气
-door-guardian weather
-
-# 使用不回显的安全输入设置新访问码
 door-guardian set-code
 ```
 
-## 邮件告警
+For automation in a trusted local shell, a value can be supplied directly:
 
-在 `.env` 中配置：
+```bash
+door-guardian set-code "a-long-local-code"
+```
+
+Avoid the second form on shared systems because shell history may retain the plaintext. The GUI change flow verifies the current code before updating it.
+
+The stored `data/access_code.json` contains only the algorithm name, iteration count, salt, and digest. Invalid or tampered metadata fails closed.
+
+## Weather usage
+
+Test the configured location from the command line:
+
+```bash
+door-guardian weather
+```
+
+The service uses the key-free Open-Meteo current-weather endpoint. A network or response error is reported cleanly by the CLI; the GUI still records the departure and explains that weather retrieval failed.
+
+## Email alerts
+
+Configure all SMTP fields in `.env`:
 
 ```dotenv
 SMTP_HOST=smtp.example.com
@@ -215,25 +265,94 @@ SMTP_RECIPIENT=owner@example.com
 SMTP_USE_SSL=true
 ```
 
-建议使用邮箱服务商生成的应用专用密码。没有配置 SMTP 时，拒绝访问仍会记录到本地，但不会发送邮件，也不会导致程序崩溃。
+Use a provider-generated app password instead of the primary mailbox password. With `SMTP_USE_SSL=true`, the client uses implicit TLS. With `false`, it connects normally and upgrades with STARTTLS before authentication.
 
-## Raspberry Pi 部署提示
+To exercise the alert path, start the GUI, select **Home / Authenticate**, and enter an incorrect fallback code. When SMTP is incomplete, denial is still logged locally and the application continues without sending mail. Delivery errors are shown in the GUI status bar.
 
-1. 确认摄像头在系统中可用，并根据需要调整 `DOOR_CAMERA_INDEX`。
-2. Raspberry Pi 上安装 OpenCV 可能需要较长时间；可以优先使用系统软件源中的 OpenCV Contrib 包。
-3. 若使用实体门锁，GPIO 控制应放在单独的、最小权限的硬件适配层中。本仓库默认不执行 GPIO 开锁，避免误动作。
-4. 使用 systemd 自动启动时，把 `.env` 权限限制为仅服务账户可读。
-5. 人脸数据和事件日志仅保存在设备本地，并设置磁盘访问权限与备份策略。
+## Command reference
 
-## 测试
+```text
+door-guardian                 Start the GUI
+door-guardian gui             Start the GUI
+door-guardian diagnose        Inspect runtime dependencies and configuration
+door-guardian collect NAME    Capture face samples for NAME
+door-guardian train           Train the LBPH model
+door-guardian recognize       Run one recognition attempt
+door-guardian weather         Print current configured-location weather
+door-guardian set-code        Set the local access code using masked input
+door-guardian --help          Show command help
+```
 
-不安装摄像头依赖也可以运行核心测试：
+The same subcommands work with `python main.py` from the repository root.
+
+## Runtime data
+
+| Path | Contents | Git behavior |
+| --- | --- | --- |
+| `data/faces/<user>/` | Private captured face images | ignored |
+| `models/lbph_model.yml` | Trained biometric model | ignored |
+| `models/labels.json` | Model label mapping | ignored |
+| `data/access_code.json` | Salted access-code digest | ignored |
+| `data/events.jsonl` | Local audit events | ignored |
+| `.env` | Local configuration and secrets | ignored |
+
+Back up these files only to encrypted, access-controlled storage. Removing `data/access_code.json` causes the next start to initialize a new hash from `DOOR_ACCESS_CODE` or the default demo code.
+
+## Raspberry Pi notes
+
+1. Confirm the camera works at the operating-system level before starting the application.
+2. Install Tkinter and audio dependencies from the OS package manager when required. On Raspberry Pi OS/Debian, packages commonly include `python3-tk`, `libatlas-base-dev`, `espeak-ng`, and `libespeak1`.
+3. Create the virtual environment and install `.[full]`. Building or downloading OpenCV may take several minutes.
+4. Set `DOOR_CAMERA_INDEX` to the camera index visible to OpenCV.
+5. Run `door-guardian diagnose`, enroll users, train the model, and test repeated recognition before enabling automatic startup.
+6. Run the process as a dedicated, minimally privileged service account and restrict `.env` and runtime-data permissions.
+7. Implement physical lock control in a separate, fail-safe adapter. This repository deliberately performs no GPIO switching.
+
+## Troubleshooting
+
+### `cv2.face` is missing
+
+The standard `opencv-python` package does not include the required contrib face module. In the active virtual environment, keep only `opencv-contrib-python`:
+
+```bash
+python -m pip uninstall -y opencv-python opencv-contrib-python
+python -m pip install "opencv-contrib-python>=4.8,<5"
+```
+
+### The camera cannot be opened
+
+- Close other applications using the camera.
+- Check operating-system camera permissions.
+- Try `DOOR_CAMERA_INDEX=1` or another valid index.
+- Confirm that the process has access to the camera device on Linux.
+
+### Tkinter is missing
+
+Official Windows Python installers normally include it. On Debian or Raspberry Pi OS:
+
+```bash
+sudo apt install python3-tk
+```
+
+### Speech is unavailable
+
+The application prints the message and continues when pyttsx3 or a system voice engine is unavailable. Install a compatible system engine such as eSpeak NG on Linux.
+
+### Weather or email fails
+
+Run `door-guardian weather` to isolate weather connectivity. Check coordinates, timezone, DNS, firewall, SMTP host/port, TLS mode, and provider app-password requirements. Secrets are never printed by `diagnose`.
+
+## Testing and validation
+
+Core tests require no camera or external service:
 
 ```bash
 python -m unittest discover -s tests -v
+python scripts/check_syntax.py
+python main.py diagnose
 ```
 
-开发依赖和检查：
+Developer checks:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -241,20 +360,44 @@ python -m pytest
 ruff check .
 ```
 
-自动测试覆盖访问码哈希与修改、配置解析、运行目录创建和事件日志。摄像头、人脸模型、SMTP 与天气网络属于外部集成，应在实际部署设备上进行验收测试。
+The automated suite covers access-code hashing and tamper handling, configuration parsing, graceful configuration errors, audit records, untrained recognition behavior, optional notifications, weather parsing, and empty face-directory handling. GitHub Actions runs the core test suite and syntax check on Python 3.10, 3.11, and 3.12.
 
-## 隐私与安全
+Camera capture, LBPH quality, SMTP delivery, speech output, and live network behavior are external integrations. Validate them on the target hardware using the workflows above.
 
-- `data/faces/`、`models/`、`data/access_code.json`、`data/events.jsonl` 默认不进入 Git。
-- 采集他人人脸前必须获得明确授权，并遵守当地隐私法规。
-- 项目不包含原型阶段使用过的邮箱、百度语音或其他第三方凭据。
-- 如果旧代码中的凭据曾真实使用，请在对应服务商后台撤销或轮换；仅整理新仓库不能使旧凭据恢复安全。
-- 详细说明见 [SECURITY.md](SECURITY.md)。
+## Project layout
 
-## 从原型迁移
+```text
+smart-door-guardian/
+|-- src/door_guardian/
+|   |-- access.py       # Access-code hashing, verification, and changes
+|   |-- audit.py        # Local JSONL event log
+|   |-- cli.py          # Command-line entry point
+|   |-- config.py       # .env and environment configuration
+|   |-- face.py         # Face collection, training, and recognition
+|   |-- gui.py          # Tkinter desktop interface
+|   |-- notifier.py     # SMTP alert delivery
+|   |-- speech.py       # Optional offline speech
+|   `-- weather.py      # Open-Meteo client
+|-- scripts/            # Convenience and syntax-check scripts
+|-- tests/              # Hardware-independent automated tests
+|-- data/faces/         # Private local samples; ignored by Git
+|-- models/             # Private trained models; ignored by Git
+|-- .env.example
+|-- pyproject.toml
+`-- main.py
+```
 
-原型中的多个窗口、测试脚本、云语音、Excel 天气文件和重复人脸逻辑已被统一模块取代。功能映射见 [docs/legacy-mapping.md](docs/legacy-mapping.md)。原始人脸照片、训练模型、音频和个人邮箱均未复制到本仓库。
+The mapping from the original prototype scripts to the maintained modules is documented in [`docs/legacy-mapping.md`](docs/legacy-mapping.md).
+
+## Privacy and security
+
+- Obtain explicit consent before collecting another person's face.
+- Follow applicable biometric and privacy laws.
+- Treat face images and trained models as sensitive biometric data.
+- Restrict access to `.env`, audit logs, hashes, samples, and models.
+- Rotate any credential that was ever embedded in an older prototype or shared publicly.
+- Review [`SECURITY.md`](SECURITY.md) before deployment.
 
 ## License
 
-MIT License
+MIT License. See [`LICENSE`](LICENSE).

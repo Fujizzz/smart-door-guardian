@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -33,7 +34,15 @@ class AccessCodeStoreTests(unittest.TestCase):
             with self.assertRaises(AccessCodeError):
                 AccessCodeStore(Path(directory) / "access.json", "123")
 
+    def test_rejects_tampered_hash_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "access.json"
+            store = AccessCodeStore(path, "123456")
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["algorithm"] = "unsupported"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertFalse(store.verify("123456"))
+
 
 if __name__ == "__main__":
     unittest.main()
-

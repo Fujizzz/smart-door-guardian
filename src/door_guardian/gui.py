@@ -181,7 +181,11 @@ class DoorGuardianApp:
         try:
             self.notifier.send_intruder_alert(reason)
         except NotificationError as exc:
-            self.root.after(0, lambda: self.status.set(f"邮件告警失败：{exc}"))
+            error_message = str(exc)
+            self.root.after(
+                0,
+                lambda: self.status.set(f"邮件告警失败：{error_message}"),
+            )
 
     def handle_departure(self) -> None:
         self.audit.record("departure")
@@ -214,6 +218,8 @@ class DoorGuardianApp:
 
         def collect_and_train() -> tuple[int, int, int]:
             collected = self.face.collect(name, samples)
+            if collected == 0:
+                raise FaceServiceError("未采集到人脸样本，已取消训练。")
             users, total = self.face.train()
             return collected, users, total
 
@@ -268,4 +274,3 @@ def run_gui(settings: Settings) -> None:
         DoorGuardianApp(settings).run()
     except FaceServiceError as exc:
         raise RuntimeError(str(exc)) from exc
-

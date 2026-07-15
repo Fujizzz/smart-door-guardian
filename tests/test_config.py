@@ -4,6 +4,8 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from door_guardian.config import get_settings  # noqa: E402
+from door_guardian.cli import main  # noqa: E402
 
 
 class SettingsTests(unittest.TestCase):
@@ -35,7 +38,18 @@ class SettingsTests(unittest.TestCase):
             self.assertEqual(settings.camera_index, 2)
             self.assertEqual(settings.weather_latitude, 30.0)
 
+    def test_cli_reports_invalid_configuration_without_traceback(self) -> None:
+        values = {"DOOR_CAMERA_INDEX": "not-a-number"}
+        with patch.dict(os.environ, values, clear=True), patch(
+            "door_guardian.cli.get_settings",
+            side_effect=ValueError("invalid camera index"),
+        ):
+            output = StringIO()
+            with redirect_stderr(output):
+                exit_code = main(["diagnose"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("invalid camera index", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
-

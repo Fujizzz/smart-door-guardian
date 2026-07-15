@@ -9,14 +9,13 @@ import platform
 import sys
 
 from .access import AccessCodeStore
-from .config import get_settings
+from .config import Settings, get_settings
 from .face import FaceService, FaceServiceError
 from .gui import run_gui
 from .weather import WeatherService
 
 
-def _diagnose() -> int:
-    settings = get_settings()
+def _diagnose(settings: Settings) -> int:
     modules = {
         "tkinter": importlib.util.find_spec("tkinter") is not None,
         "cv2": importlib.util.find_spec("cv2") is not None,
@@ -55,15 +54,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = get_settings()
     command = args.command or "gui"
 
     try:
+        settings = get_settings()
         if command == "gui":
             run_gui(settings)
             return 0
         if command == "diagnose":
-            return _diagnose()
+            return _diagnose(settings)
         if command == "collect":
             count = FaceService(settings).collect(args.name, args.samples)
             print(f"Collected {count} samples.")
@@ -84,7 +83,7 @@ def main(argv: list[str] | None = None) -> int:
             AccessCodeStore(settings.access_code_path, code).set_code(code)
             print("Access code updated.")
             return 0
-    except (FaceServiceError, OSError, RuntimeError, ValueError) as exc:
+    except (FaceServiceError, ImportError, OSError, RuntimeError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     return 1
